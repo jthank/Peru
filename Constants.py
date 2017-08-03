@@ -3,9 +3,11 @@ from hapi import *
 import math as Math
 import matplotlib.pyplot as plt
 import DataReader as dataReader
+import GlobalConstants as const
+
 
 def checkFlag(bit):
-    return plotFlag >> bit & 0b1
+    return const.plotFlag >> bit & 0b1
 
 def swapWnWl(WlWn):
     return (1.0 / WlWn) * 10000000
@@ -53,30 +55,10 @@ def plot2Matrix(nu, coef):
     plt.show()
 
 
-plotFlag = 0b111
-FWHM = 5
-wnStep = 0.01
-wlStep = 0.01
-wavelengthLow = 2278 - 4 * FWHM
-wavelengthHigh = 2358 + 4 * FWHM
-wnLow = swapWnWl(wavelengthHigh)
-wnHigh = swapWnWl(wavelengthLow)
-bands = 9
-species = [['H20', 1, 1], ['N20', 4, 1], ['CH4', 6, 1]]
-# Boundary is everything above the number ex: layer 2 (index 1) is 10->20
-atmosLayersAltitude = []
-    # [16.5, 12.5, 10, 8, 6, 4.5, 3, 2, 1, 0]
-atmosLayerT = []
-    # = dataReader.createTempProfile()
-atmosLayerP = []
-    # = [0.07, 0.135, 0.21, 0.3, 0.41, 0.51, 0.625, 0.735, 0.83, 0.94]
 
-
-def initializeConstants(coordinates):
+def initializeConstants():
     dataReader.initializeDataReader()
-    coordinates, atmosLayerP, atmosLayersAltitude, atmosLayerT, verticalProfileCH4, verticalProfileN2O, verticalProfileH2O = dataReader.getProfilesAtCoordinate(coordinates)
-    wlAxis, I0, TrefMat = retrieveLinearlyAlignedI0andTref()
-    return wlAxis, I0, TrefMat, verticalProfileH2O + verticalProfileN2O + verticalProfileCH4
+    setLinearlyAlignedI0andTref()
 
 
 # rounds both numbers to the nearest multiple of step, and then returns:
@@ -133,18 +115,18 @@ def retrieveTref():
     TrefNusList = []
     TrefCoefsList = []
 
-    for iSpec in range(len(species)):
-        fetch(species[iSpec][0], species[iSpec][1], species[iSpec][2], wnLow, wnHigh)
+    for iSpec in range(len(const.species)):
+        fetch(const.species[iSpec][0], const.species[iSpec][1], const.species[iSpec][2], const.wnLow, const.wnHigh)
 
-        for iLayer in range(len(atmosLayersAltitude)):
-            nu, coef = absorptionCoefficient_Lorentz(SourceTables=species[iSpec][0], HITRAN_units=True,
-                                                     Environment={'T': atmosLayerT[iLayer], 'p': atmosLayerP[iLayer]},
-                                                     WavenumberStep=wnStep)
+        for iLayer in range(len(const.levelAltitudes)):
+            nu, coef = absorptionCoefficient_Lorentz(SourceTables=const.species[iSpec][0], HITRAN_units=True,
+                                                     Environment={'T': const.levelTemperatures[iLayer], 'p': const.levelPressures[iLayer]},
+                                                     WavenumberStep=const.wnStep)
 
             # Outer layer of atmosphere is at 100 km
-            previousBoundary = 100 if iLayer == 0 else atmosLayersAltitude[iLayer - 1]
-            distance = 100000 * previousBoundary - atmosLayersAltitude[iLayer]
-            coef *= distance
+            # previousBoundary = 100000 if iLayer == 0 else atmosLayersAltitude[iLayer - 1]
+            # distance = 100 * (previousBoundary - atmosLayersAltitude[iLayer])
+            # coef *= distance
 
             TrefNusList.append(nu)
             TrefCoefsList.append(coef)
@@ -152,10 +134,10 @@ def retrieveTref():
     return TrefNusList, TrefCoefsList
 
 
-def retrieveLinearlyAlignedI0andTref():
+def setLinearlyAlignedI0andTref():
     TrefCoefsFixedMatrix = []
     wlI0, valI0 = dataReader.readI0()
-    xI0, yI0 = fixXAxis(wlI0, valI0, wavelengthLow, wavelengthHigh, wlStep)
+    xI0, yI0 = fixXAxis(wlI0, valI0, const.wlLowPadded, const.wlHighPadded, const.wlStep)
     TrefNusList, TrefCoefsList = retrieveTref()
     plot2Matrix(TrefNusList, TrefCoefsList)
 
@@ -165,24 +147,22 @@ def retrieveLinearlyAlignedI0andTref():
         for iWl in range(len(rgWl)):
             rgWl[iWl] = swapWnWl(rgWl[iWl])
 
-        rgWlFixed, rgCoefsFixed = fixXAxis(rgWl, rgCoefs, wavelengthLow, wavelengthHigh, wlStep)
+        rgWlFixed, rgCoefsFixed = fixXAxis(rgWl, rgCoefs, const.wlLowPadded, const.wlHighPadded, const.wlStep)
         TrefCoefsFixedMatrix.append(rgCoefsFixed)
 
-    return xI0, yI0, TrefCoefsFixedMatrix
+    const.wlAxis = xI0
+    const.I0 = yI0
+    const.TrefMat = TrefCoefsFixedMatrix
 
 
 def retrieveA(altitude, SZA):
     SZAradians = np.deg2rad(SZA)
-    arrA = np.zeros((len(atmosLayersAltitude) * len(species), 1))
+    const.A = np.empty(len(const.levelAltitudes) * len(const.species))
 
-    for iLayer in range(len(atmosLayersAltitude)):
-        for iSpec in range(len(species)):
+    for iLayer in range(len(const.levelAltitudes)):
+        for iSpec in range(len(const.species)):
             # if the aircraft is entirely above the layer, it has the additional 1.
-            arrA[iLayer + iSpec * len(atmosLayersAltitude)][0] = \
-                1 / np.cos(SZAradians) if altitude < atmosLayersAltitude[iLayer] else 1 + 1 / np.cos(SZAradians)
-
-    return np.matrix(arrA)
-
+            const.A[iLayer + iSpec * len(const.levelAltitudes)] = 1 / np.cos(SZAradians) if altitude < const.levelAltitudes[iLayer] else 1 + 1 / np.cos(SZAradians)
 
 # def alignI0andT():
 #     nuI0, coefI0 = retrieveI0()
