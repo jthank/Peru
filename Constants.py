@@ -19,17 +19,17 @@ def plot1Matrix(rgWl, coef):
 
     for i in range(10):
         plt.subplot(5, 2, i + 1)
-        plt.plot(rgWl, coef[i])
+        plt.plot(rgWl, coef[10 * i])
 
     plt.show()
     for i in range(10):
         plt.subplot(5, 2, i + 1)
-        plt.plot(rgWl, coef[10 + i])
+        plt.plot(rgWl, coef[100 + 10 * i])
 
     plt.show()
     for i in range(10):
         plt.subplot(5, 2, i + 1)
-        plt.plot(rgWl, coef[20 + i])
+        plt.plot(rgWl, coef[200 + 9 * i])
 
     plt.show()
 
@@ -151,6 +151,9 @@ def setLinearlyAlignedI0andTref():
         TrefCoefsFixedMatrix.append(rgCoefsFixed)
 
     const.wlAxis = xI0
+    for wl in const.bands:
+        const.wlAxisBandIndexes.append(int(round((wl - const.wlAxis[0]) / const.wlStep)))
+
     const.I0 = yI0
     const.TrefMat = TrefCoefsFixedMatrix
 
