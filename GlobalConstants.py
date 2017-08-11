@@ -32,7 +32,8 @@ wlStep = 0.01
 
 wnLow = swapWnWl(wlHighPadded)
 wnHigh = swapWnWl(wlLowPadded)
-species = [['H2O', 1, 1], ['N2O', 4, 1], ['CO', 5, 1], ['CH4', 6, 1]]
+#['CO', 5, 1],
+species = [['H2O', 1, 1], ['N2O', 4, 1],  ['CH4', 6, 1]]
 
 arrIMG = []
 arrORT = []

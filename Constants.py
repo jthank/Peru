@@ -133,6 +133,34 @@ def retrieveTref():
 
     return TrefNusList, TrefCoefsList
 
+def getIncidentIntensity(iWl, pixel):
+    wavelengths = [2262.5, 2282.5, 2302.5, 2322.5, 2342.5, 2362.5]
+    I0Factor = [.0238207, .0185019, .0161892, .0174742, .0145124, .0163191]
+    SZA = Math.radians(const.arrORT[pixel[0]][pixel[1]][4])
+    FraunFactor = Math.cos(SZA) * const.I0[iWl]
+    print FraunFactor, const.wlAxis[iWl]
+    index = 0
+    while index < len(wavelengths) and const.wlAxis[iWl] > wavelengths[index]:
+        index += 1
+
+    if index == len(wavelengths):
+        return I0Factor[len(I0Factor) - 1] * FraunFactor
+
+    if index == 0:
+        return I0Factor[0] * FraunFactor
+
+    return FraunFactor * ((const.wlAxis[iWl] - wavelengths[index - 1]) / (wavelengths[index] - wavelengths[index - 1]) * (I0Factor[index] - I0Factor[index - 1]) + I0Factor[index - 1])
+
+def makeI0Absolute(yI0):
+    # Added the 0 and 5000 term to avoid special casing an index past the end of the array and the start
+    wavelengths = [0, 2262.5, 2282.5, 2302.5, 2322.5, 2342.5, 2362.5, 5000]
+    I0Factor = [.0238207, .0238207, .0185019, .0161892, .0174742, .0145124, .0163191, .0163191]
+    index = 1
+    for iWl in range(len(yI0)):
+        if const.wlAxis[iWl] >= wavelengths[index]:
+            index += 1
+
+        yI0[iWl] = 10000 * ((const.wlAxis[iWl] - wavelengths[index - 1]) / (wavelengths[index] - wavelengths[index - 1]) * (I0Factor[index] - I0Factor[index - 1]) + I0Factor[index - 1])
 
 def setLinearlyAlignedI0andTref():
     TrefCoefsFixedMatrix = []
@@ -154,6 +182,7 @@ def setLinearlyAlignedI0andTref():
     for wl in const.bands:
         const.wlAxisBandIndexes.append(int(round((wl - const.wlAxis[0]) / const.wlStep)))
 
+    makeI0Absolute(yI0)
     const.I0 = yI0
     const.TrefMat = TrefCoefsFixedMatrix
 

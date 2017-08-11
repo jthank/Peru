@@ -3,6 +3,7 @@ import math as Math
 import GlobalConstants as const
 from Constants import *
 from DataReader import *
+from multiprocessing.dummy import Pool as ThreadPool
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -13,65 +14,42 @@ def gaussianConvolution(Fhr, FWHM, wingLength):
     return np.convolve(Fhr, gaussian, mode="same") * const.wlStep
 
 
-def calcFhr(A, T, X):
+
+def calcFhr(A, T, X, pixel):
     Fhr = np.zeros(len(T[0]))
-    for wl in range(len(T[0])):
+    for iWl in range(len(T[0])):
         exponent = 0
         for iLayer in range(len(X)):
-            exponent -= A[iLayer] * X[iLayer] * T[iLayer][wl]
+            exponent -= A[iLayer] * X[iLayer] * T[iLayer][iWl]
 
-        Fhr[wl] = Math.exp(exponent) * 0.1367 * const.I0[wl]
+        Fhr[iWl] = Math.exp(exponent) * const.I0[iWl] * Math.cos(Math.radians(const.arrORT[pixel[0]][pixel[1]][4]))
 
     return Fhr
 
-def calcFlr(A, T, X):
+
+def calcFlr(A, T, X, pixel):
     plot1Matrix(const.wlAxis, T)
-    Fhr = calcFhr(A, T, X)
-
+    Fhr = calcFhr(A, T, X, pixel)
     conv = gaussianConvolution(Fhr, const.FWHM, 1.5 * const.FWHM)
-    # conv2 = gaussianConvolution(Fhr, const.FWHM, 1.5 * const.FWHM)
-    # conv3 = gaussianConvolution(Fhr, const.FWHM, 1.5 * const.FWHM)
-    # conv4 = gaussianConvolution(Fhr, const.FWHM, 1.5 * const.FWHM)
-    # conv5 = gaussianConvolution(Fhr, const.FWHM, 1.5 * const.FWHM)
-    # conv6 = gaussianConvolution(Fhr, const.FWHM, 1.5 * const.FWHM)
-    # conv7 = gaussianConvolution(Fhr, const.FWHM, 1.5 * const.FWHM)
-
-    # plt.subplot(2, 1, 1)
-    plt.plot(const.wlAxis, conv, label='1')
-    # plt.plot(const.wlAxis, conv2, label='2')
-    # plt.plot(const.wlAxis, conv3, label='3')
-    # plt.plot(const.wlAxis, conv4, label='4')
-    # plt.plot(const.wlAxis, conv5, label='5')
-    # plt.plot(const.wlAxis, conv6, label='6')
-    # plt.plot(const.wlAxis, conv7, label='7')
-    # conv2 = gaussianConvolution(np.multiply(const.I0, 0.1367), const.FWHM, 3 * const.FWHM)
-    # plt.plot(const.wlAxis, conv2)
-    #
-    # for i in range(75):
-    #     radiances = []
-    #     for iC in range(len(const.AVIRIS_CenterIndexes)):
-    #         radiances.append(0.04 * Math.pi * const.arrIMG[const.pixelX+i][const.pixelY+i][const.AVIRIS_CenterIndexes[iC]] * const.bands[iC] / const.arrRFL[const.pixelX+i][const.pixelY+i][const.AVIRIS_CenterIndexes[iC]])
-    #     plt.plot(const.bands, np.multiply(2,radiances))
-
-
-
-    # plt.subplot(2, 1, 2)
-    # plt.plot(const.wlAxis, Fhr)
-    # plt.show()
+    plt.plot(const.wlAxis, conv, label='Modeled Irradiance')
     return conv
 
 
-def isValidPixel():
+def isValidPixel(pixelX, pixelY):
+    if const.arrIMG[pixelX][pixelY][0] < 0:
+        return False
+
     return True
+
 
 def retrieveAMF(aircraftAlt, SZA, CZA, lowAlt, highAlt):
     cameraZenithFactor = 1 if aircraftAlt > highAlt else 0 if aircraftAlt < lowAlt else (aircraftAlt - lowAlt) / (highAlt - lowAlt)
     # replace 1 with (highAlt - lowAlt)
-    return 1.0 / Math.cos(Math.radians(SZA)) + \
-           cameraZenithFactor * 1.0 / Math.cos(Math.radians(CZA))
+    return 1.0 / Math.cos(Math.radians(SZA)) + cameraZenithFactor * 1.0 / Math.cos(Math.radians(CZA))
 
-def retrieveHeightAdjustedATX(iWidth, iLength):
-    pixelElevation = const.arrIGM[iWidth][iLength][2] #check this
+
+def retrieveHeightAdjustedATX(pixelX, pixelY):
+    pixelElevation = const.arrIGM[pixelX][pixelY][2]
     T = [row[:] for row in const.TrefMat]
     X = const.verticalProfiles[:]
     iAlt = len(const.levelAltitudes) - 1
@@ -84,10 +62,10 @@ def retrieveHeightAdjustedATX(iWidth, iLength):
         iAlt -= 1
 
     alts = const.levelAltitudes[:iAlt + 1]
-    aircraftAlt = const.arrORT[iWidth][iLength][0] * Math.cos(Math.radians(const.arrORT[iWidth][iLength][2]))
+    aircraftAlt = const.arrORT[pixelX][pixelY][0] * Math.cos(Math.radians(const.arrORT[pixelX][pixelY][2]))
     A = np.empty(len(X))
-    CZA = const.arrORT[iWidth][iLength][2]
-    SZA = const.arrORT[iWidth][iLength][4]
+    CZA = const.arrORT[pixelX][pixelY][2]
+    SZA = const.arrORT[pixelX][pixelY][4]
 
     for iAlt in range(len(alts)):
         low = 0.5 * alts[iAlt + 1] + 0.5 * alts[iAlt] if iAlt < len(alts) - 1 else pixelElevation
@@ -108,8 +86,9 @@ def getError(radiances, Flr, currErrors):
     print sum
     currErrors.append(sum)
 
-def applyGradient(A, T, X, radiances, alpha, currErrors):
-    Flr = calcFlr(A, T, X)
+
+def applyGradient(A, T, X, radiances, alpha, currErrors, pixel):
+    Flr = calcFlr(A, T, X, pixel)
     getError(radiances, Flr, currErrors)
     for iX in range(len(X)):
         for iBand in range(len(const.bands)):
@@ -119,7 +98,7 @@ def applyGradient(A, T, X, radiances, alpha, currErrors):
             X[iX] -= alpha * (a - b) / c
 
 
-def gradientDescent(A, T, X, radiances):
+def gradientDescent(A, T, X, radiances, pixel):
     base = Math.pow(10, 33)
     Xs = []
     alphas = [1 * base, 2 * base, 3 * base, 4 * base]
@@ -130,7 +109,7 @@ def gradientDescent(A, T, X, radiances):
     for iX in range(len(Xs)):
         currErrors = []
         for i in range(100):
-            applyGradient(A, T, Xs[iX], radiances, alphas[iX], currErrors)
+            applyGradient(A, T, Xs[iX], radiances, alphas[iX], currErrors, pixel)
 
         allErrors.append(currErrors)
 
@@ -148,62 +127,91 @@ def gradientDescent(A, T, X, radiances):
 
     for i in range(4):
         plt.subplot(2, 2, i + 1)
-        conv = calcFlr(A, T, Xs[i])
+        conv = calcFlr(A, T, Xs[i], pixel)
         plt.plot(const.wlAxis, conv)
         plt.plot(const.bands, radiances)
 
     plt.show()
 
-def adjustMeasuredRadiances():
+
+def adjustMeasuredRadiances3():
     radiances = []
     for iC in range(len(const.AVIRIS_CenterIndexes)):
         radiances.append(0.04 * Math.pi * const.arrIMG[const.pixelX][const.pixelY][const.AVIRIS_CenterIndexes[iC]] * const.bands[iC] / const.arrRFL[const.pixelX][const.pixelY][const.AVIRIS_CenterIndexes[iC]])
 
     return radiances
 
-def adjustMeasuredRadiances2():
+
+def adjustMeasuredRadiances(pixelX, pixelY):
     radiances = []
     for iC in range(len(const.AVIRIS_CenterIndexes)):
-        radiances.append(0.04 * Math.pi * const.arrIMG[const.pixelX][const.pixelY][const.AVIRIS_CenterIndexes[iC]] * const.bands[iC])
+        radiances.append(
+            (0.01 * Math.pi * const.arrIMG[pixelX][pixelY][const.AVIRIS_CenterIndexes[iC]] * const.bands[iC])
+            / (const.arrRFL[pixelX][pixelY][const.AVIRIS_CenterIndexes[iC]] * Math.cos(Math.radians(const.arrORT[pixelX][pixelY][4]))))
 
     return radiances
 
-def analyzeImage():
+
+xStartStop = (400, 420)
+yStartStop = (400, 420)
+
+
+def processPixel(pixels):
+    print "Processing " + str(pixels[0]) + ", " + str(pixels[1])
+    if not isValidPixel(pixels[0], pixels[1]):
+        return 0
+
+    A, T, X = retrieveHeightAdjustedATX(pixels[0], pixels[1])
+    initialMethaneConcentraion = X[len(X) - 1]
+    radiances = adjustMeasuredRadiances(pixels[0], pixels[1])
+    gradientDescent(A, T, X, radiances, pixels)
+    return X[len(X) - 1] / initialMethaneConcentraion
+
+
+def analyzeImageMultiThreaded():
     initializeConstants()
-    # for iWidth in range(const.arrIMG.shape[0]):
-    #     for iLength in range(const.arrIMG.shape[1]):
-    #         if not isValidPixel(iWidth, iLength):
-    #             continue
+    pixelTuples = []
+    for pixelX in range(xStartStop[0], xStartStop[1]):
+        for pixelY in range(yStartStop[0], yStartStop[1]):
+            pixelTuples.append((pixelX, pixelY))
 
-    A, T, X = retrieveHeightAdjustedATX(const.pixelX, const.pixelY)
-    calcFlr(A, T, X)
 
-    radiances = adjustMeasuredRadiances()
-    plt.plot(const.bands, radiances)
-    radiances2 = adjustMeasuredRadiances2()
-    plt.plot(const.bands, radiances2)
-    plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
-               ncol=2, mode="expand", borderaxespad=0.)
+    pool = ThreadPool(8)
+    print pool.map(processPixel, pixelTuples)
+
+def analyzeImageSingleThread():
+    pixel = (xStartStop[0], yStartStop[0])
+    initializeConstants()
+    A, T, X = retrieveHeightAdjustedATX(pixel[0], pixel[1])
+    Flr = calcFlr(A, T, X, pixel)
+    plt.plot(const.wlAxis, const.I0)
+    print const.FWHM
+    conv = gaussianConvolution(const.I0, const.FWHM, 1.5 * const.FWHM)
+    plt.plot(const.wlAxis, conv)
+    for pixelX in range(xStartStop[0], xStartStop[1]):
+        for pixelY in range(yStartStop[0], yStartStop[1]):
+            radiances = adjustMeasuredRadiances(pixelX, pixelY)
+            plt.plot(const.bands, radiances)
     plt.show()
-    # gradientDescent(A, T, X, radiances)
+
+    # processPixel(pixel)
+
+
+    # A, T, X = retrieveHeightAdjustedATX(const.pixelX, const.pixelY)
     # calcFlr(A, T, X)
+    #
+    # radiances = adjustMeasuredRadiances3()
+    # radiances2 = adjustMeasuredRadiances(const.pixelX, const.pixelY)
+    # plt.plot(const.bands, radiances2, label='Gathered Radiances')
+    # # plt.plot(const.bands, radiances, label='Gathered Irradiance (adjusted)')
+    # plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+    #            ncol=2, mode="expand", borderaxespad=0.)
+    # plt.show()
+    # gradientDescent(A, T, X, radiances2)
+    # calcFlr(A, T, X)
+    # plt.plot(const.bands, radiances2, label='Gathered Radiances')
+    # plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+    #            ncol=2, mode="expand", borderaxespad=0.)
+    # plt.show()
 
-
-
-    print 'hi'
-
-# dataReader.readAvirisData()
-# name = 'blah'
-# fetch(name, 1, 1, const.wnLow, const.wnHigh)
-# nu, coef = absorptionCoefficient_Lorentz(SourceTables=name, HITRAN_units=True)
-# plt.plot(nu, coef)
-# plt.show()
-analyzeImage()
-# initializeConstants(9000, 12, (-63, 5))
-# X = const.verticalProfilesH2O.tolist() + const.verticalProfilesN2O.tolist() + const.verticalProfilesCH4.tolist()
-# calcFlr(X)
-
-# dataReader.readAvirisData()
-#
-# wlAxis, I0, TrefMat, X = initializeConstants((-63, 5))
-# calcFlr(wlAxis, TrefMat, I0, X)
+analyzeImageSingleThread()
