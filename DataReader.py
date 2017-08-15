@@ -102,13 +102,12 @@ def readAvirisData():
 def readI0():
     nuI0file = []
     coefI0file = []
-    fraunSpec = open("FraunSpecHR_2258-2378.txt", "r")
+    fraunSpec = open("ETSI.dat", "r")
 
     for line in fraunSpec:
-        pair = line.split()
-        # 10.0 because the input data is in Angstroms not nm
-        nuI0file.append(float(pair[0]) / 10.0)
-        coefI0file.append(float(pair[1]))
+        pair = line.split(",")
+        nuI0file.append(float(pair[0]))
+        coefI0file.append(float(pair[1]) * float(pair[0]))
 
     return nuI0file, coefI0file
 

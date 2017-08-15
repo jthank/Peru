@@ -162,27 +162,32 @@ def makeI0Absolute(yI0):
 
         yI0[iWl] = 10000 * ((const.wlAxis[iWl] - wavelengths[index - 1]) / (wavelengths[index] - wavelengths[index - 1]) * (I0Factor[index] - I0Factor[index - 1]) + I0Factor[index - 1])
 
+
+def convertAxisToWlAndFixIntervals(rgWn, rgCoefs):
+    rgWl = list(reversed(rgWn))
+    rgCoefs = list(reversed(rgCoefs))
+    for iWl in range(len(rgWl)):
+        rgWl[iWl] = swapWnWl(rgWl[iWl])
+
+    return fixXAxis(rgWl, rgCoefs, const.wlLowPadded, const.wlHighPadded, const.wlStep)
+
+
 def setLinearlyAlignedI0andTref():
     TrefCoefsFixedMatrix = []
-    wlI0, valI0 = dataReader.readI0()
-    xI0, yI0 = fixXAxis(wlI0, valI0, const.wlLowPadded, const.wlHighPadded, const.wlStep)
+    wnI0, valI0 = dataReader.readI0()
+    xI0, yI0 = convertAxisToWlAndFixIntervals(wnI0, valI0)
     TrefNusList, TrefCoefsList = retrieveTref()
     plot2Matrix(TrefNusList, TrefCoefsList)
 
     for iList in range(len(TrefNusList)):
-        rgWl = list(reversed(TrefNusList[iList]))
-        rgCoefs = list(reversed(TrefCoefsList[iList]))
-        for iWl in range(len(rgWl)):
-            rgWl[iWl] = swapWnWl(rgWl[iWl])
-
-        rgWlFixed, rgCoefsFixed = fixXAxis(rgWl, rgCoefs, const.wlLowPadded, const.wlHighPadded, const.wlStep)
+        rgWlFixed, rgCoefsFixed = convertAxisToWlAndFixIntervals(TrefNusList[iList], TrefCoefsList[iList])
         TrefCoefsFixedMatrix.append(rgCoefsFixed)
 
     const.wlAxis = xI0
     for wl in const.bands:
         const.wlAxisBandIndexes.append(int(round((wl - const.wlAxis[0]) / const.wlStep)))
 
-    makeI0Absolute(yI0)
+    # makeI0Absolute(yI0)
     const.I0 = yI0
     const.TrefMat = TrefCoefsFixedMatrix
 
