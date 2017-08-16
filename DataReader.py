@@ -77,14 +77,13 @@ def getLatLongCoordinates(rfl):
     return (-119.863672, 34.423762)
     # return (lon, lat)
 
-
 def readAvirisData():
-    img = envi.open('C:\Users\Jordan\Desktop\AVIRIS-NG2\RDN\imgHDR.hdr', 'C:\Users\Jordan\Desktop\AVIRIS-NG2\RDN\img')
-    ort = envi.open('C:\Users\Jordan\Desktop\AVIRIS-NG2\RDN\ortHDR.hdr', 'C:\Users\Jordan\Desktop\AVIRIS-NG2\RDN\ort')
-    glt = envi.open('C:\Users\Jordan\Desktop\AVIRIS-NG2\RDN\gltHDR.hdr', 'C:\Users\Jordan\Desktop\AVIRIS-NG2\RDN\glt')
-    igm = envi.open('C:\Users\Jordan\Desktop\AVIRIS-NG2\RDN\igmHDR.hdr', 'C:\Users\Jordan\Desktop\AVIRIS-NG2\RDN\igm')
-    rfl = envi.open('C:\Users\Jordan\Desktop\AVIRIS-NG2\RFL\imgHDR.hdr', 'C:\Users\Jordan\Desktop\AVIRIS-NG2\RFL\img')
-    H2O = envi.open('C:\Users\Jordan\Desktop\AVIRIS-NG2\RFL\H2OHDR.hdr', 'C:\Users\Jordan\Desktop\AVIRIS-NG2\RFL\H2O')
+    img = envi.open('C:\Users\Jordan\Desktop\AVIRIS-NG-COP\RDN\imgHDR.hdr', 'C:\Users\Jordan\Desktop\AVIRIS-NG-COP\RDN\img')
+    ort = envi.open('C:\Users\Jordan\Desktop\AVIRIS-NG-COP\RDN\ortHDR.hdr', 'C:\Users\Jordan\Desktop\AVIRIS-NG-COP\RDN\ort')
+    glt = envi.open('C:\Users\Jordan\Desktop\AVIRIS-NG-COP\RDN\gltHDR.hdr', 'C:\Users\Jordan\Desktop\AVIRIS-NG-COP\RDN\glt')
+    igm = envi.open('C:\Users\Jordan\Desktop\AVIRIS-NG-COP\RDN\igmHDR.hdr', 'C:\Users\Jordan\Desktop\AVIRIS-NG-COP\RDN\igm')
+    rfl = envi.open('C:\Users\Jordan\Desktop\AVIRIS-NG-COP\RFL\imgHDR.hdr', 'C:\Users\Jordan\Desktop\AVIRIS-NG-COP\RFL\img')
+    H2O = envi.open('C:\Users\Jordan\Desktop\AVIRIS-NG-COP\RFL\H2OHDR.hdr', 'C:\Users\Jordan\Desktop\AVIRIS-NG-COP\RFL\H2O')
 
     const.arrH2O = H2O.open_memmap()
     const.arrIMG = img.open_memmap()

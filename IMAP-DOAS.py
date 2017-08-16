@@ -22,11 +22,8 @@ def plotBars(xAxis, bars):
 
     plt.xticks(indexes, xAxis, rotation='vertical')
 
-def gaussianConvolution(Fhr, FWHM, wingLength):
-    x = np.arange(-wingLength, wingLength + const.wlStep, const.wlStep)
-    gaussian = SLIT_GAUSSIAN(x, FWHM)
-    return np.convolve(Fhr, gaussian, mode="same") * const.wlStep
-
+def gaussianConvolution(Fhr):
+    return np.convolve(Fhr, const.gaussian, mode="same") * const.wlStep
 
 
 def calcFhr(A, T, X, pixel):
@@ -40,9 +37,28 @@ def calcFhr(A, T, X, pixel):
 
     return Fhr
 
+
+def calcFhr1(A1, A2, T, X, X0, pixel):
+    Fhr = np.zeros(len(T[0]))
+    X0H = np.zeros(len(X0))
+    X0H[:len(X0) / 3] = X0[:len(X0) / 3]
+    Xdiff = np.subtract(X, X0H)
+    for iWl in range(len(T[0])):
+        exponent = 0
+        exponent2 = 0
+        for iLayer in range(len(X)):
+            exponent -= A1[iLayer] * X[iLayer] * T[iLayer][iWl]
+            exponent2 -= A2[iLayer] * Xdiff[iLayer] * T[iLayer][iWl]
+
+        Fhr[iWl] = Math.exp(exponent + exponent2) * const.I0[iWl] * Math.cos(Math.radians(const.arrORT[pixel[0]][pixel[1]][4]))
+
+    return Fhr
+
+
 def calcFhr2(A1, A2, T, X, X0, pixel):
     Fhr = np.zeros(len(T[0]))
     Xdiff = np.subtract(X, X0)
+
     for iWl in range(len(T[0])):
         exponent = 0
         exponent2 = 0
@@ -193,9 +209,10 @@ def applyGradient2(A1, A2, T, X, X0, radiances, currErrors, pixel, minX, minErro
     layers = len(X) / len(const.species)
     for iSpecBoundaries in range(layers, len(const.species) * layers + 1, layers):
         for iX in range(iSpecBoundaries - 1, iSpecBoundaries - const.changeableLayers - 1, -1):
-            springTopBound = 2.5
-            currentFactor = X[iX] / X0[iX]
-            springFactor = currentFactor if currentFactor < 1 else Math.pow((1 + 1.0 / (springTopBound - 1)) - currentFactor / (springTopBound - 1), 2)
+            # springTopBound = 2.5
+            # currentFactor = X[iX] / X0[iX]
+            # springFactor = currentFactor if currentFactor < 1 else Math.pow((1 + 1.0 / (springTopBound - 1)) - currentFactor / (springTopBound - 1), 2)
+            springFactor = 1
 
             for iBand in range(len(const.bands)):
                 a = 2 * radiances[iBand] * (A1[iX] + A2[iX]) * T[iX][const.wlAxisBandIndexes[iBand]] * Flr[const.wlAxisBandIndexes[iBand]]
@@ -227,15 +244,14 @@ def gradientDescent2(A1, A2, T, X, X0, radiances, pixel):
     for i in range(const.iterations):
         minX, minError = applyGradient2(A1, A2, T, X, X0, radiances, errors, pixel, minX, minError)
         if q.get() - minError < const.stopThreshold:
-            return minError
+            return minX, minError, errors
 
         q.put(minError)
 
+    return minX, minError, errors
 
-    return minX
 
-
-def gradientDescent3(A1, A2, T, X, X0, radiances, pixel):
+def gradientDescent(A1, A2, T, X, X0, radiances, pixel):
     errors = []
     minX = []
     minError = sys.float_info.max
@@ -312,26 +328,20 @@ def gradientDescentMultiAlphas2(A1, A2, T, X, X0, radiances, pixel):
     iterations = 100
     base = Math.pow(10, 33)
     Xs = []
-    alphas = [2 * base]
-    # 100 * base, 500 * base, 1000 * base, 5000 * base
+    alphas = [const.alpha]
     allErrors = []
     minXs = []
     for i in range(len(alphas)):
         Xs.append(X[:])
 
     for iX in range(len(Xs)):
-        currErrors = []
-        minX = []
-        minError = sys.float_info.max
-        for i in range(iterations):
-            minX, minError = applyGradient2(A1, A2, T, Xs[iX], X0, radiances, alphas[iX], currErrors, pixel, minX, minError)
-
+        minX, minError, currErrors = gradientDescent2(A1, A2, T, Xs[iX], X0, radiances, pixel)
         minXs.append(minX)
         allErrors.append(currErrors)
 
     for i in range(len(Xs)):
         plt.subplot(1, 1, i + 1)
-        plt.plot(np.arange(0, iterations), allErrors[i])
+        plt.plot(np.arange(0, len(allErrors[i])), allErrors[i])
 
     plt.show()
 
@@ -382,9 +392,8 @@ def adjustMeasuredRadiances(pixelX, pixelY):
 
     return radiances
 
-
-xStartStop = (1570, 1573)
-yStartStop = (730, 734)
+xStartStop = (5742, 5745)
+yStartStop = (580, 583)
 
 
 def processPixel(pixels):
@@ -394,8 +403,8 @@ def processPixel(pixels):
     A1, A2, T, X = retrieveHeightAdjustedATX2(pixels[0], pixels[1])
     X0 = X[:]
     radiances = adjustMeasuredRadiances(pixels[0], pixels[1])
-    gradientDescent2(A1, A2, T, X, X0, radiances, pixels)
-    return X[len(X) - 1] / X0[len(X0) - 1]
+    minX, minError, errors = gradientDescent2(A1, A2, T, X, X0, radiances, pixels)
+    return minX[len(minX) - 1] / X0[len(X0) - 1]
 
 
 def analyzeImage():
@@ -408,6 +417,12 @@ def analyzeImage():
             methaneFactors.append(processPixel((pixelX, pixelY)))
             nCompleted += 1
             print str(100 * nCompleted / nPixels) + "%"
+
+        currentTime = time.localtime()
+        print "Writing File..."
+        np.savetxt("TextOutputs/CH4Factors" + time.strftime('%a-%d-%b-%Y-%H-%M-%S-GMT-', currentTime) + str(pixelX) +
+                   "-" + str(pixelY) + ".txt", np.reshape(methaneFactors, (1 + pixelX - xStartStop[0], yStartStop[1] - yStartStop[0])), delimiter=", ",newline=" |\n")
+        print "Done"
 
     return np.reshape(methaneFactors, (xStartStop[1] - xStartStop[0], yStartStop[1] - yStartStop[0]))
 
@@ -472,17 +487,17 @@ def analyzeImageSingleThread():
     # plt.show()
 
 
+def analyzeAndPlotImage():
+    methaneFactors = analyzeImage()
+    heatmap = plt.imshow(methaneFactors, cmap='plasma', interpolation='nearest', vmin=0.8, vmax=2)
+    plt.colorbar(heatmap)
+    plt.show()
+    # im = Image.open("AerialImage.jpeg")
+    # im2 = im.crop((yStartStop[0], xStartStop[0], yStartStop[1] - 1, xStartStop[1] - 1))
+    # im2.show()
 
-methaneFactors = analyzeImage()
-heatmap = plt.imshow(methaneFactors, cmap='plasma', interpolation='nearest', vmin=0.8, vmax=2)
-plt.colorbar(heatmap)
-plt.show()
-print methaneFactors
-# im = Image.open("AerialImage.jpeg")
-# im2 = im.crop((xStartStop[0], yStartStop[0], xStartStop[1] - 1, yStartStop[1] - 1))
-# im2.show()
-
-
+# analyzeAndPlotImage()
+analyzeImageSingleThread()
 # analyzeImageSingleThread()
 # methaneFactors = analyzeImageMultiThreaded()
 # heatmap = plt.imshow(methaneFactors, cmap='plasma', interpolation='nearest', vmin=0, vmax=3)
