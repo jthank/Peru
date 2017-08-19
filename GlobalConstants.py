@@ -1,6 +1,5 @@
 from Constants import swapWnWl
 import math as Math
-from hapi import *
 import numpy as np
 
 
@@ -48,10 +47,10 @@ wlHigh = 2330
 # Resolution up to 0.01
 wnStep = 0.01
 wlStep = 0.1
-gaussian = SLIT_GAUSSIAN(np.arange(-1.5 * FWHM, 1.5 * FWHM + wlStep, wlStep), FWHM)
+gaussian = []
 
-changeableLayers = 8
-alpha = 3.5 * Math.pow(10, 33)
+changeableLayers = 3
+alpha = 2 * Math.pow(10, 34)
 iterations = 100
 stopThreshold = 0.10
 

@@ -6,6 +6,7 @@ import pyproj as pyproj
 from spectral import *
 import spectral.io.envi as envi
 import GlobalConstants as const
+from hapi import *
 import matplotlib.pyplot as plt
 
 import h5py as h5
@@ -84,18 +85,31 @@ def readAvirisData():
     igm = envi.open('C:\Users\Jordan\Desktop\AVIRIS-NG-COP\RDN\igmHDR.hdr', 'C:\Users\Jordan\Desktop\AVIRIS-NG-COP\RDN\igm')
     rfl = envi.open('C:\Users\Jordan\Desktop\AVIRIS-NG-COP\RFL\imgHDR.hdr', 'C:\Users\Jordan\Desktop\AVIRIS-NG-COP\RFL\img')
     H2O = envi.open('C:\Users\Jordan\Desktop\AVIRIS-NG-COP\RFL\H2OHDR.hdr', 'C:\Users\Jordan\Desktop\AVIRIS-NG-COP\RFL\H2O')
-
     const.arrH2O = H2O.open_memmap()
     const.arrIMG = img.open_memmap()
     const.arrORT = ort.open_memmap()
     const.arrGLT = glt.open_memmap()
     const.arrIGM = igm.open_memmap()
     const.arrRFL = rfl.open_memmap()
+
+    # img = envi.open('D:\COP-OCEAN-DATA\RDN\imgHDR.hdr', 'D:\COP-OCEAN-DATA\RDN\img')
+    # ort = envi.open('D:\COP-OCEAN-DATA\RDN\ortHDR.hdr', 'D:\COP-OCEAN-DATA\RDN\ort')
+    # glt = envi.open('D:\COP-OCEAN-DATA\RDN\gltHDR.hdr', 'D:\COP-OCEAN-DATA\RDN\glt')
+    # igm = envi.open('D:\COP-OCEAN-DATA\RDN\igmHDR.hdr', 'D:\COP-OCEAN-DATA\RDN\igm')
+    # rfl = envi.open('D:\COP-OCEAN-DATA\RFL\imgHDR.hdr', 'D:\COP-OCEAN-DATA\RFL\img')
+    # H2O = envi.open('D:\COP-OCEAN-DATA\RFL\H2OHDR.hdr', 'D:\COP-OCEAN-DATA\RFL\H2O')
+    # const.arrH2O = H2O.open_memmap()
+    # const.arrIMG = img.open_memmap()
+    # const.arrORT = ort.open_memmap()
+    # const.arrGLT = glt.open_memmap()
+    # const.arrIGM = igm.open_memmap()
+    # const.arrRFL = rfl.open_memmap()
+
     # view = imshow(img, (29, 19, 9))
     const.bands = img.bands.centers
     selectBands()
     const.FWHM = float(rfl.metadata['fwhm'][const.AVIRIS_CenterIndexes[len(const.AVIRIS_CenterIndexes) / 2]])
-
+    const.gaussian = SLIT_GAUSSIAN(np.arange(-1.5 * const.FWHM, 1.5 * const.FWHM + const.wlStep, const.wlStep), const.FWHM)
     return getLatLongCoordinates(rfl)
 
 def readI0():

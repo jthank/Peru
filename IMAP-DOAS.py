@@ -10,19 +10,22 @@ import matplotlib.pyplot as plt
 import Queue
 import numpy as np
 import time
-
-
+from scipy import stats
 
 
 def plotBars(xAxis, bars):
     barWidth = 0.9 / len(bars)
     indexes = np.arange(len(bars[0]))
+    labels = ["L_97", "L_98", "L_99"]
+    colors = ["black", "gray", "lightblue"]
     for iBars in range(len(bars)):
-        plt.bar(indexes + iBars * barWidth, bars[iBars], barWidth)
+        plt.bar(indexes + iBars * barWidth, bars[iBars], barWidth, label=labels[iBars], color=colors[iBars])
 
+    plt.legend()
     plt.xticks(indexes, xAxis, rotation='vertical')
 
 def gaussianConvolution(Fhr):
+
     return np.convolve(Fhr, const.gaussian, mode="same") * const.wlStep
 
 
@@ -81,9 +84,8 @@ def calcFlr(A, T, X, pixel):
 def calcFlr2(A1, A2, T, X, X0, pixel):
     plot1Matrix(const.wlAxis, T)
     Fhr = calcFhr2(A1, A2, T, X, X0, pixel)
-    conv = gaussianConvolution(Fhr, const.FWHM, 1.5 * const.FWHM)
-    # plt.plot(const.wlAxis, conv, label='Modeled Irradiance')
-    return conv
+    conv = gaussianConvolution(Fhr)
+    return Fhr, conv
 
 
 def isValidPixel(pixelX, pixelY):
@@ -172,7 +174,7 @@ def getError(radiances, Flr):
     for iBand in range(len(const.bands)):
         sum += abs(Flr[const.wlAxisBandIndexes[iBand]] - radiances[iBand])
 
-    print sum
+    # print sum
 
     return sum
 
@@ -198,7 +200,32 @@ def applyGradient(A, T, X, radiances, alpha, currErrors, pixel, minX, minError):
     return minX, minError
 
 def applyGradient2(A1, A2, T, X, X0, radiances, currErrors, pixel, minX, minError):
-    Flr = calcFlr2(A1, A2, T, X, X0, pixel)
+    Fhr, Flr = calcFlr2(A1, A2, T, X, X0, pixel)
+    error = getError(radiances, Flr)
+    currErrors.append(error)
+
+    if error < minError:
+        minError = error
+        minX = X[:]
+
+    layers = len(X) / len(const.species)
+    for iSpecBoundaries in range(layers, len(const.species) * layers + 1, layers):
+        for iX in range(iSpecBoundaries - 1, iSpecBoundaries - const.changeableLayers - 1, -1):
+            g = np.multiply(np.multiply(T[iX], Fhr), -1 * (A1[iX] + A2[iX]))
+            # springTopBound = 2.5
+            # currentFactor = X[iX] / X0[iX]
+            # springFactor = currentFactor if currentFactor < 1 else Math.pow((1 + 1.0 / (springTopBound - 1)) - currentFactor / (springTopBound - 1), 2)
+            springFactor = 1
+
+            for iBand in range(len(const.bands)):
+                a = 2 * g[const.wlAxisBandIndexes[iBand]] * Flr[const.wlAxisBandIndexes[iBand]] - 2 * radiances[iBand] * g[const.wlAxisBandIndexes[iBand]]
+                b = Math.sqrt(radiances[iBand] * radiances[iBand] - 2 * radiances[iBand] * Flr[const.wlAxisBandIndexes[iBand]] + Flr[const.wlAxisBandIndexes[iBand]] * Flr[const.wlAxisBandIndexes[iBand]])
+                X[iX] -= springFactor * const.alpha * a / b
+
+    return minX, minError
+
+def applyGradient3(A1, A2, T, X, X0, radiances, currErrors, pixel, minX, minError):
+    Fhr, Flr = calcFlr2(A1, A2, T, X, X0, pixel)
     error = getError(radiances, Flr)
     currErrors.append(error)
 
@@ -221,7 +248,6 @@ def applyGradient2(A1, A2, T, X, X0, radiances, currErrors, pixel, minX, minErro
                 X[iX] -= springFactor * const.alpha * (a - b) / c
 
     return minX, minError
-
 
 def gradientDescent(A, T, X, radiances, pixel):
     alpha = 4 * Math.pow(10, 32)
@@ -326,27 +352,28 @@ def gradientDescentMultiAlphas(A, T, X, radiances, pixel):
 
 def gradientDescentMultiAlphas2(A1, A2, T, X, X0, radiances, pixel):
     iterations = 100
-    base = Math.pow(10, 33)
+    base = Math.pow(10, 34)
     Xs = []
-    alphas = [const.alpha]
+    alphas = [0.02 * base, 0.2 * base, 2 * base, 20 * base]
     allErrors = []
     minXs = []
     for i in range(len(alphas)):
         Xs.append(X[:])
 
     for iX in range(len(Xs)):
+        const.alpha = alphas[iX]
         minX, minError, currErrors = gradientDescent2(A1, A2, T, Xs[iX], X0, radiances, pixel)
         minXs.append(minX)
         allErrors.append(currErrors)
 
     for i in range(len(Xs)):
-        plt.subplot(1, 1, i + 1)
+        plt.subplot(2, 2, i + 1)
         plt.plot(np.arange(0, len(allErrors[i])), allErrors[i])
 
     plt.show()
 
     for i in range(len(Xs)):
-        plt.subplot(1, 1, i + 1)
+        plt.subplot(2, 2, i + 1)
 
         layers = len(X) / len(const.species)
 
@@ -367,11 +394,11 @@ def gradientDescentMultiAlphas2(A1, A2, T, X, X0, radiances, pixel):
     plt.show()
 
     for i in range(len(Xs)):
-        plt.subplot(1, 1, i + 1)
-        conv = calcFlr2(A1, A2, T, minXs[i], X0, pixel)
-        plt.plot(const.wlAxis, conv)
-        plt.plot(const.bands, radiances)
-
+        plt.subplot(2, 2, i + 1)
+        Fhr, conv = calcFlr2(A1, A2, T, minXs[i], X0, pixel)
+        plt.plot(const.wlAxis, conv, label='Modeled Irradiance')
+        plt.plot(const.bands, radiances, label='Gathered Irradiance')
+        plt.legend()
     plt.show()
 
 
@@ -392,36 +419,148 @@ def adjustMeasuredRadiances(pixelX, pixelY):
 
     return radiances
 
-xStartStop = (5742, 5745)
-yStartStop = (580, 583)
 
+def loadText(path):
+    return np.loadtxt(path, delimiter=", ",)
+
+
+def stitchImages(dirPath):
+    files = os.listdir(dirPath)
+    rgFactors = []
+    rgErrors = []
+    rgBounds = []
+    for path in files:
+        dashSplit = path.split("-")
+        if dashSplit[1] == "Factors":
+            rgFactors.append(loadText(dirPath + "/" + path))
+            rgBounds.append(((int(dashSplit[2]), int(dashSplit[3])), (int(dashSplit[4]), int(dashSplit[5]))))
+
+        else:
+            rgErrors.append(loadText(dirPath + "/" + path))
+
+
+    xMin = sys.maxint
+    xMax = 0
+    yMin = sys.maxint
+    yMax = 0
+
+    for bound in rgBounds:
+        if bound[0][0] < xMin:
+            xMin = bound[0][0]
+
+        if bound[0][1] > xMax:
+            xMax = bound[0][1]
+
+        if bound[1][0] < yMin:
+            yMin = bound[1][0]
+
+        if bound[1][1] > yMax:
+            yMax = bound[1][1]
+
+    stitchedMap = np.zeros((xMax - xMin, yMax - yMin))
+    stitchedErrors = np.zeros((xMax - xMin, yMax - yMin))
+
+    for iImage in range(len(rgFactors)):
+        xStart = rgBounds[iImage][0][0] - xMin
+        yStart = rgBounds[iImage][1][0] - yMin
+        stitchedMap[xStart: xStart + rgBounds[iImage][0][1] - rgBounds[iImage][0][0], yStart:yStart + rgBounds[iImage][1][1] - rgBounds[iImage][1][0]] = rgFactors[iImage]
+        stitchedErrors[xStart: xStart + rgBounds[iImage][0][1] - rgBounds[iImage][0][0], yStart:yStart + rgBounds[iImage][1][1] - rgBounds[iImage][1][0]] = rgErrors[iImage]
+
+
+    heatmap = plt.imshow(stitchedMap, cmap='plasma', interpolation='nearest', vmin=1, vmax=2.2)
+    plt.colorbar(heatmap)
+    plt.show()
+    im = Image.open("AerialImage.jpeg")
+    im2 = im.crop((yMin, xMin, yMax, xMax))
+    im2.show()
+    plotReflectionCorrelation(stitchedMap, (xMin, xMax), (yMin, yMax))
+
+
+xStartStop = (2200, 2350)
+yStartStop = (336, 369)
+
+def plotReflectionCorrelation(methaneScalingFactors, xSS, ySS):
+    reflectionFactors = []
+    flatFactors = []
+    for pixelX in range(xSS[0], xSS[1]):
+        for pixelY in range(ySS[0], ySS[1]):
+            if methaneScalingFactors[pixelX - xSS[0]][pixelY - ySS[0]] == 0:
+                continue
+
+            sum = 0
+            count = 0
+
+            rng = const.AVIRIS_CenterIndexes
+            if len(rng) == 0:
+                rng = range(386, 397)
+                rfl = envi.open('C:\Users\Jordan\Desktop\AVIRIS-NG-COP\RFL\imgHDR.hdr', 'C:\Users\Jordan\Desktop\AVIRIS-NG-COP\RFL\img')
+                const.arrRFL = rfl.open_memmap()
+
+            for iC in rng:
+                sum += const.arrRFL[pixelX][pixelY][iC]
+                count += 1
+
+            flatFactors.append(methaneScalingFactors[pixelX - xSS[0]][pixelY - ySS[0]])
+            reflectionFactors.append(sum / count)
+
+    flatFactors = np.asarray(flatFactors)
+    plt.plot(flatFactors, reflectionFactors, '.')
+    slope, intercept, r_value, p_value, std_err = stats.linregress(flatFactors, reflectionFactors)
+    plt.plot(flatFactors, intercept + slope * flatFactors, 'r')
+    plt.text(1, -0.02, "R^2 = " + str(r_value ** 2))
+    plt.show()
 
 def processPixel(pixels):
     if not isValidPixel(pixels[0], pixels[1]):
-        return 0
+        return 1, 0
 
     A1, A2, T, X = retrieveHeightAdjustedATX2(pixels[0], pixels[1])
     X0 = X[:]
     radiances = adjustMeasuredRadiances(pixels[0], pixels[1])
     minX, minError, errors = gradientDescent2(A1, A2, T, X, X0, radiances, pixels)
-    return minX[len(minX) - 1] / X0[len(X0) - 1]
+    return minError / np.sum(radiances), minX[len(minX) - 1] / X0[len(X0) - 1]
+
+def getMinimumScalingFactor():
+    print "Finding minimum scaling factor"
+    normalPixels = [(5360, 350), (5560, 650), (6040, 500), (6130, 680)]
+    radius = 2
+    minScalingFactor = sys.float_info.max
+
+    for pixel in normalPixels:
+        for pixelX in range(pixel[0], pixel[0] + radius):
+            for pixelY in range(pixel[1], pixel[1] + radius):
+                error, scalingFactor = processPixel((pixelX, pixelY))
+                if scalingFactor < minScalingFactor:
+                    minScalingFactor = scalingFactor
+
+    print "Minimum scaling factor found: " + str(minScalingFactor)
+    return minScalingFactor
 
 
 def analyzeImage():
     initializeConstants()
+    minScalingFactor = 1.62
+    # minScalingFactor = getMinimumScalingFactor()
     methaneFactors = []
+    averagePercentErrors = []
     nPixels = 1.0 * (xStartStop[1] - xStartStop[0]) * (yStartStop[1] - yStartStop[0])
     nCompleted = 0
     for pixelX in range(xStartStop[0], xStartStop[1]):
         for pixelY in range(yStartStop[0], yStartStop[1]):
-            methaneFactors.append(processPixel((pixelX, pixelY)))
+            averagePercentError, methaneScalingFactor = processPixel((pixelX, pixelY))
+            methaneFactors.append(methaneScalingFactor / minScalingFactor)
+            averagePercentErrors.append(averagePercentError)
             nCompleted += 1
             print str(100 * nCompleted / nPixels) + "%"
 
         currentTime = time.localtime()
-        print "Writing File..."
-        np.savetxt("TextOutputs/CH4Factors" + time.strftime('%a-%d-%b-%Y-%H-%M-%S-GMT-', currentTime) + str(pixelX) +
-                   "-" + str(pixelY) + ".txt", np.reshape(methaneFactors, (1 + pixelX - xStartStop[0], yStartStop[1] - yStartStop[0])), delimiter=", ",newline=" |\n")
+        print "Writing Files..."
+        np.savetxt("TextOutputs/" + str(pixelX - xStartStop[0]) + "-Factors-" + str(xStartStop[0]) + "-" + str(xStartStop[1]) + "-" + str(yStartStop[0]) + "-" + str(yStartStop[1]) + "-"
+                   + ".txt", np.reshape(methaneFactors, (1 + pixelX - xStartStop[0], yStartStop[1] - yStartStop[0])), delimiter=", ", newline="\n")
+
+        np.savetxt("TextOutputs/" + str(pixelX - xStartStop[0]) + "-Errors-" + str(xStartStop[0]) + "-" + str(xStartStop[1]) + "-" + str(yStartStop[0]) + "-" + str(yStartStop[1]) + "-"
+                   + ".txt", np.reshape(averagePercentErrors, (1 + pixelX - xStartStop[0], yStartStop[1] - yStartStop[0])), delimiter=", ", newline="\n")
+
         print "Done"
 
     return np.reshape(methaneFactors, (xStartStop[1] - xStartStop[0], yStartStop[1] - yStartStop[0]))
@@ -436,18 +575,7 @@ def analyzeImageSingleThread():
             pixels = (pixelX, pixelY)
             A1, A2, T, X = retrieveHeightAdjustedATX2(pixels[0], pixels[1])
             X0 = X[:]
-            # A2, T2, X2, = retrieveHeightAdjustedATX2(pixels[0], pixels[1])
             radiances = adjustMeasuredRadiances(pixels[0], pixels[1])
-            # Flr = calcFlr2(A1, A2, T, X, pixels)
-            # Flr2 = calcFlr(A2, T2, X2, pixels)
-            # plt.plot(const.wlAxis, Flr)
-            # plt.plot(const.wlAxis, Flr2)
-            # plt.plot(const.bands, radiances)
-            # for i in range(30):
-            #     radiances = adjustMeasuredRadiances(pixels[0] + i, pixels[1])
-            #     plt.plot(const.bands, radiances)
-
-            # plt.show()
             gradientDescentMultiAlphas2(A1, A2, T, X, X0, radiances, pixels)
 
 
@@ -486,23 +614,15 @@ def analyzeImageSingleThread():
     # plotBars(xAxis2, allRatios)
     # plt.show()
 
-
 def analyzeAndPlotImage():
     methaneFactors = analyzeImage()
-    heatmap = plt.imshow(methaneFactors, cmap='plasma', interpolation='nearest', vmin=0.8, vmax=2)
+    heatmap = plt.imshow(methaneFactors, cmap='plasma', interpolation='nearest', vmin=1, vmax=2.5)
     plt.colorbar(heatmap)
     plt.show()
     # im = Image.open("AerialImage.jpeg")
     # im2 = im.crop((yStartStop[0], xStartStop[0], yStartStop[1] - 1, xStartStop[1] - 1))
     # im2.show()
 
+stitchImages("./TextOutputs/Final")
 # analyzeAndPlotImage()
-analyzeImageSingleThread()
-# analyzeImageSingleThread()
-# methaneFactors = analyzeImageMultiThreaded()
-# heatmap = plt.imshow(methaneFactors, cmap='plasma', interpolation='nearest', vmin=0, vmax=3)
-# plt.colorbar(heatmap)
-# plt.show()
-# print methaneFactors
-
 # analyzeImageSingleThread()
