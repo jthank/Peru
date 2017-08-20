@@ -1,6 +1,5 @@
 from Constants import swapWnWl
 import math as Math
-import numpy as np
 
 
 
@@ -26,7 +25,6 @@ A = []
 plotFlag = 0b100
 
 
-# ['CO', 5, 1],
 species = [['H2O', 1, 1], ['N2O', 4, 1], ['CO', 5, 1], ['CH4', 6, 1]]
 
 arrIMG = []
@@ -34,9 +32,6 @@ arrORT = []
 arrRFL = []
 arrIGM = []
 arrH2O = []
-
-
-
 
 #2278
 #2358

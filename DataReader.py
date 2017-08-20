@@ -1,19 +1,16 @@
-import os
 from netCDF4 import Dataset
 import numpy as np
 import math as Math
 import pyproj as pyproj
-from spectral import *
 import spectral.io.envi as envi
 import GlobalConstants as const
 from hapi import *
-import matplotlib.pyplot as plt
 
-import h5py as h5
 
 
 def barometricFormula(temperature, pressure):
     return -29.27175933 * temperature * Math.log(pressure)
+
 
 def getProfilesAtCoordinate(inputCoordinate, coordinates, allVerticalProfiles, levelTemperaturesByCoordinate):
     minIndex = 0
@@ -31,6 +28,7 @@ def getProfilesAtCoordinate(inputCoordinate, coordinates, allVerticalProfiles, l
 
     for iPress in range(len(const.levelPressures)):
         const.levelAltitudes.append(barometricFormula(const.levelTemperatures[iPress], const.levelPressures[iPress]))
+
 
 def initializeDataReader():
     allVerticalProfiles = []
@@ -92,19 +90,6 @@ def readAvirisData():
     const.arrIGM = igm.open_memmap()
     const.arrRFL = rfl.open_memmap()
 
-    # img = envi.open('D:\COP-OCEAN-DATA\RDN\imgHDR.hdr', 'D:\COP-OCEAN-DATA\RDN\img')
-    # ort = envi.open('D:\COP-OCEAN-DATA\RDN\ortHDR.hdr', 'D:\COP-OCEAN-DATA\RDN\ort')
-    # glt = envi.open('D:\COP-OCEAN-DATA\RDN\gltHDR.hdr', 'D:\COP-OCEAN-DATA\RDN\glt')
-    # igm = envi.open('D:\COP-OCEAN-DATA\RDN\igmHDR.hdr', 'D:\COP-OCEAN-DATA\RDN\igm')
-    # rfl = envi.open('D:\COP-OCEAN-DATA\RFL\imgHDR.hdr', 'D:\COP-OCEAN-DATA\RFL\img')
-    # H2O = envi.open('D:\COP-OCEAN-DATA\RFL\H2OHDR.hdr', 'D:\COP-OCEAN-DATA\RFL\H2O')
-    # const.arrH2O = H2O.open_memmap()
-    # const.arrIMG = img.open_memmap()
-    # const.arrORT = ort.open_memmap()
-    # const.arrGLT = glt.open_memmap()
-    # const.arrIGM = igm.open_memmap()
-    # const.arrRFL = rfl.open_memmap()
-
     # view = imshow(img, (29, 19, 9))
     const.bands = img.bands.centers
     selectBands()
@@ -123,54 +108,3 @@ def readI0():
         coefI0file.append(float(pair[1]) * float(pair[0]))
 
     return nuI0file, coefI0file
-
-
-# def readFile(password, verbose):
-#     # if (len(sys.argv) != 2):
-#     #   print "usage: "+sys.argv[0]+" [-q] password_on_RDA_webserver"
-#     #   print "-q suppresses the progress message for each file that is downloaded"
-#     #   sys.exit(1)
-#
-#     # passwd_idx=1
-#     # verbose=True
-#     # if (len(sys.argv) == 3 and sys.argv[1] == "-q"):
-#     #   passwd_idx=2
-#     #   verbose=False
-#
-#     cj=cookielib.MozillaCookieJar()
-#     opener=urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
-#
-#     # check for existing cookies file and authenticate if necessary
-#     do_authentication=False
-#     if (os.path.isfile("auth.rda.ucar.edu")):
-#       cj.load("auth.rda.ucar.edu",False,True)
-#       for cookie in cj:
-#         if (cookie.name == "sess" and cookie.is_expired()):
-#           do_authentication=True
-#     else:
-#       do_authentication=True
-#     if (do_authentication):
-#       login=opener.open("https://rda.ucar.edu/cgi-bin/login","email=jhank@stanford.edu&password="+password+"&action=login")
-#
-#     # save the authentication cookies for future downloads
-#     # NOTE! - cookies are saved for future sessions because overly-frequent authentication to our server can cause your data access to be blocked
-#       cj.clear_session_cookies()
-#       cj.save("auth.rda.ucar.edu",True,True)
-#
-#     # download the data file(s)
-#     listoffiles=["3HRLY/2008/NARRsfc_200806_2030.tar"]
-#     for file in listoffiles:
-#       idx=file.rfind("/")
-#       if (idx > 0):
-#         ofile=file[idx+1:]
-#       else:
-#         ofile=file
-#       if (verbose):
-#         sys.stdout.write("downloading "+ofile+"...")
-#         sys.stdout.flush()
-#       infile=opener.open("http://rda.ucar.edu/data/ds608.0/"+file)
-#       outfile=open(ofile,"wb")
-#       outfile.write(infile.read())
-#       outfile.close()
-#       if (verbose):
-#         sys.stdout.write("done.\n")
